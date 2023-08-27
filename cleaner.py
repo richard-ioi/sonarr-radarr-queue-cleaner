@@ -40,6 +40,20 @@ async def make_api_request(url, api_key, params=None):
         logging.error(f'Error parsing JSON response from {url}: {e}')
         return None
 
+# Function to make API POST requests with error handling
+async def make_api_post(url, api_key, data=None):
+    try:
+        headers = {'X-Api-Key': api_key, 'Content-Type': 'application/json'}
+        response = await asyncio.get_event_loop().run_in_executor(None, lambda: requests.post(url, data=json.dumps(data), headers=headers))
+        response.raise_for_status()
+        return response.json()
+    except RequestException as e:
+        logging.error(f'Error making API request to {url}: {e}')
+        return None
+    except ValueError as e:
+        logging.error(f'Error parsing JSON response from {url}: {e}')
+        return None
+
 # Function to make API delete with error handling
 async def make_api_delete(url, api_key, params=None):
     try:
@@ -91,24 +105,53 @@ async def remove_stalled_radarr_downloads():
         logging.warning('Radarr queue is None or missing "records" key')
 
 #Function to import the sync lists on Sonarr
-async def refresh_sonarr_list():
-    logging.info('Refreshing Sonarr sync list...')
+async def import_sonarr_list():
+    logging.info('Importing Sonarr sync list...')
     sonarr_url = f'{SONARR_API_URL}/command'
-    sonarr_queue = await make_api_request(sonarr_url, SONARR_API_KEY, {'name': 'ImportListSync'})
+    sonarr_queue = await make_api_post(sonarr_url, SONARR_API_KEY, {'name': 'ImportListSync'})
     if sonarr_queue is not None:
-        logging.info('Refreshing Sonarr sync list')
+        logging.info('Imported Sonarr sync list')
     else:
         logging.warning('Sonarr queue is None or missing "records" key')
 
 #Function to import the sync lists on Radarr
-async def refresh_radarr_list():
-    logging.info('Refreshing Radarr sync list...')
+async def import_radarr_list():
+    logging.info('Importing Radarr sync list...')
     radarr_url = f'{RADARR_API_URL}/command'
-    radarr_queue = await make_api_request(radarr_url, RADARR_API_KEY, {'name': 'ImportListSync'})
+    radarr_queue = await make_api_post(radarr_url, RADARR_API_KEY, {'name': 'ImportListSync'})
     if radarr_queue is not None:
-        logging.info('Refreshing Radarr sync list')
+        logging.info('Imported Radarr sync list')
     else:
         logging.warning('Radarr queue is None or missing "records" key')
+
+async def get_sonarr_seriesIds():
+    logging.info('Getting all monitored series Ids..')
+    sonarr_url = f'{SONARR_API_URL}/series'
+    data = await make_api_request(sonarr_url, SONARR_API_KEY)
+    series_ids = []
+    if data is not None:
+        series_ids = []
+        for series in data:
+            series_ids.append(series["id"])
+        logging.info('Got all monitored series Ids..')
+    else:
+        logging.warning("Couldn't grab any series Ids..")
+    return series_ids
+
+#Function to import the refresh missing episodes on Sonarr
+async def refresh_missing_episodes_sonarr():
+    logging.info('Refreshing Sonarr missing episodes on monitored series...')
+    sonarr_url = f'{SONARR_API_URL}/command'
+    sonarr_queue = await make_api_post(sonarr_url, SONARR_API_KEY, {'name': 'missingEpisodeSearch'})
+    if sonarr_queue is not None:
+        logging.info('Refreshed Sonarr missing episodes on monitored series')
+    else:
+        logging.warning('Sonarr queue is None or missing "records" key')
+    
+    #seriesIds = await get_sonarr_seriesIds()
+    #for i in seriesIds:
+    #    series_search = await make_api_post(sonarr_url, SONARR_API_KEY, {'name': 'SeriesSearch', 'seriesId': i })
+    logging.info('Refreshed Sonarr missing episodes on monitored series...')
 
 
 # Make a request to view and count items in queue and return the number.
@@ -124,8 +167,9 @@ async def main():
         logging.info('Running media-tools script')
         await remove_stalled_sonarr_downloads()
         await remove_stalled_radarr_downloads()
-        await refresh_sonarr_list()
-        await refresh_radarr_list()
+        await import_sonarr_list()
+        await import_radarr_list()
+        await refresh_missing_episodes_sonarr()
         logging.info(f'Finished running media-tools script. Sleeping for {API_TIMEOUT/60} minutes.')
         await asyncio.sleep(API_TIMEOUT)
 
