@@ -90,6 +90,27 @@ async def remove_stalled_radarr_downloads():
     else:
         logging.warning('Radarr queue is None or missing "records" key')
 
+#Function to import the sync lists on Sonarr
+async def refresh_sonarr_list():
+    logging.info('Refreshing Sonarr sync list...')
+    sonarr_url = f'{SONARR_API_URL}/command'
+    sonarr_queue = await make_api_request(sonarr_url, SONARR_API_KEY, {'name': 'ImportListSync'})
+    if sonarr_queue is not None:
+        logging.info('Refreshing Sonarr sync list')
+    else:
+        logging.warning('Sonarr queue is None or missing "records" key')
+
+#Function to import the sync lists on Radarr
+async def refresh_radarr_list():
+    logging.info('Refreshing Radarr sync list...')
+    radarr_url = f'{RADARR_API_URL}/command'
+    radarr_queue = await make_api_request(radarr_url, RADARR_API_KEY, {'name': 'ImportListSync'})
+    if radarr_queue is not None:
+        logging.info('Refreshing Radarr sync list')
+    else:
+        logging.warning('Radarr queue is None or missing "records" key')
+
+
 # Make a request to view and count items in queue and return the number.
 async def count_records(API_URL, API_Key):
     the_url = f'{API_URL}/queue'
@@ -103,7 +124,9 @@ async def main():
         logging.info('Running media-tools script')
         await remove_stalled_sonarr_downloads()
         await remove_stalled_radarr_downloads()
-        logging.info('Finished running media-tools script. Sleeping for 10 minutes.')
+        await refresh_sonarr_list()
+        await refresh_radarr_list()
+        logging.info(f'Finished running media-tools script. Sleeping for {API_TIMEOUT/60} minutes.')
         await asyncio.sleep(API_TIMEOUT)
 
 if __name__ == '__main__':
